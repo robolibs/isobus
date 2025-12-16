@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-set(project_name isobus)
+set(project_name tractor)
 
 project(${project_name} VERSION 0.0.1 LANGUAGES CXX)
 

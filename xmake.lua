@@ -1,4 +1,4 @@
-set_project("isobus")
+set_project("tractor")
 set_version("0.0.1")
 set_xmakever("2.7.0")
 
@@ -113,29 +113,29 @@ if has_config("tests") then
 end
 
 -- Main library target
-target("isobus")
+target("tractor")
     set_kind("static")
-    add_files("src/isobus/**.cpp")
-    add_headerfiles("include/(isobus/**.hpp)")
+    add_files("src/tractor/**.cpp")
+    add_headerfiles("include/(tractor/**.hpp)")
     add_includedirs("include", {public = true})
     add_packages("concord", "agisostack")
     add_syslinks("pthread")
 
-    add_installfiles("include/(isobus/**.hpp)")
+    add_installfiles("include/(tractor/**.hpp)")
     on_install(function (target)
         local installdir = target:installdir()
         os.cp(target:targetfile(), path.join(installdir, "lib", path.filename(target:targetfile())))
     end)
 target_end()
 
--- Examples (only build when isobus is the main project)
+-- Examples (only build when tractor is the main project)
 if has_config("examples") and os.projectdir() == os.curdir() then
     for _, filepath in ipairs(os.files("examples/*.cpp")) do
         local filename = path.basename(filepath)
         target(filename)
             set_kind("binary")
             add_files(filepath)
-            add_deps("isobus")
+            add_deps("tractor")
             add_packages("concord", "agisostack")
             add_ldflags("-Wl,--start-group", "-lIsobus", "-lHardwareIntegration", "-lUtility", "-Wl,--end-group", {force = true})
             add_syslinks("pthread")
@@ -144,14 +144,14 @@ if has_config("examples") and os.projectdir() == os.curdir() then
     end
 end
 
--- Tests (only build when isobus is the main project)
+-- Tests (only build when tractor is the main project)
 if has_config("tests") and os.projectdir() == os.curdir() then
     for _, filepath in ipairs(os.files("test/*.cpp")) do
         local filename = path.basename(filepath)
         target(filename)
             set_kind("binary")
             add_files(filepath)
-            add_deps("isobus")
+            add_deps("tractor")
             add_packages("concord", "agisostack", "doctest")
             add_ldflags("-Wl,--start-group", "-lIsobus", "-lHardwareIntegration", "-lUtility", "-Wl,--end-group", {force = true})
             add_syslinks("pthread")
