@@ -5,6 +5,7 @@
 #include "isobus/isobus/isobus_device_descriptor_object_pool.hpp"
 #include "isobus/isobus/isobus_standard_data_description_indices.hpp"
 #include "isobus/isobus/isobus_task_controller_client.hpp"
+#include "tractor/comms/serial.hpp"
 
 #include <atomic>
 #include <cassert>
@@ -12,12 +13,94 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <thread>
 #include <vector>
 
 static std::atomic_bool running = true;
+static std::atomic<std::int32_t> gnss_auth_status = 0;
+static std::atomic<std::int32_t> gnss_warning = 0;
 
 void signal_handler(int) { running = false; }
+
+struct PHTGData {
+    std::string date;
+    std::string time;
+    std::string system;
+    std::string service;
+    int auth_result;
+    int warning;
+};
+
+bool validate_checksum(const std::string &sentence) {
+    size_t star_pos = sentence.find('*');
+    if (star_pos == std::string::npos || star_pos + 2 >= sentence.length()) {
+        return false;
+    }
+
+    std::uint8_t calc_cs = 0;
+    for (size_t i = 1; i < star_pos; i++) {
+        calc_cs ^= static_cast<std::uint8_t>(sentence[i]);
+    }
+
+    std::string cs_str = sentence.substr(star_pos + 1, 2);
+    int recv_cs = std::stoi(cs_str, nullptr, 16);
+
+    return calc_cs == recv_cs;
+}
+
+bool parse_phtg(const std::string &sentence, PHTGData &data) {
+    if (sentence.substr(0, 5) != "$PHTG") {
+        return false;
+    }
+
+    if (!validate_checksum(sentence)) {
+        return false;
+    }
+
+    size_t star_pos = sentence.find('*');
+    std::string body = sentence.substr(6, star_pos - 6);
+
+    std::stringstream ss(body);
+    std::string token;
+    int field = 0;
+
+    while (std::getline(ss, token, ',')) {
+        switch (field) {
+        case 0:
+            data.date = token;
+            break;
+        case 1:
+            data.time = token;
+            break;
+        case 2:
+            data.system = token;
+            break;
+        case 3:
+            data.service = token;
+            break;
+        case 4:
+            data.auth_result = token.empty() ? 0 : std::stoi(token);
+            break;
+        case 5:
+            data.warning = token.empty() ? 0 : std::stoi(token);
+            break;
+        }
+        field++;
+    }
+
+    return field >= 6;
+}
+
+void process_nmea_line(const std::string &line) {
+    if (line.substr(0, 5) == "$PHTG") {
+        PHTGData phtg;
+        if (parse_phtg(line, phtg)) {
+            gnss_auth_status.store(phtg.auth_result);
+            gnss_warning.store(phtg.warning);
+        }
+    }
+}
 
 class SectionControlImplementSimulator {
   public:
@@ -141,14 +224,14 @@ class SectionControlImplementSimulator {
                      isobus::NAME clientName) const {
         bool retVal = true;
         std::uint16_t elementCounter = 0;
-        constexpr std::int32_t BOOM_WIDTH = 36576;
+        constexpr std::int32_t BOOM_WIDTH = 12000;
         assert(0 != get_number_of_sections());
         const std::int32_t SECTION_WIDTH = (BOOM_WIDTH / get_number_of_sections());
         poolToPopulate->clear();
 
         constexpr std::array<std::uint8_t, 7> localizationData = {'e', 'n', 0x50, 0x00, 0x55, 0x55, 0xFF};
 
-        retVal &= poolToPopulate->add_device("AgIsoStack++ Test", "1.0.0", "123", "A++1.0", localizationData,
+        retVal &= poolToPopulate->add_device("HASHTAG", "1.0.1", "123", "A++1.1", localizationData,
                                              std::vector<std::uint8_t>(), clientName.get_full_name());
         retVal &= poolToPopulate->add_device_element(
             "Sprayer", elementCounter++, 0, isobus::task_controller_object::DeviceElementObject::Type::Device,
@@ -501,6 +584,9 @@ class SectionControlImplementSimulator {
             case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualWorkState):
                 value = sim->get_actual_work_state();
                 break;
+            case static_cast<std::uint16_t>(isobus::DataDescriptionIndex::ActualWorkingWidth):
+                value = 12000; // 12m boom width in mm
+                break;
             default:
                 value = 0;
                 break;
@@ -556,8 +642,37 @@ class SectionControlImplementSimulator {
     bool setpointWorkState = true;
 };
 
-int main() {
+int main(int argc, char **argv) {
+    const char *serial_device = "/tmp/ttyV0";
+    int serial_baud = 115200;
+
+    if (argc > 1) {
+        serial_device = argv[1];
+    }
+    if (argc > 2) {
+        serial_baud = std::atoi(argv[2]);
+    }
+
     std::signal(SIGINT, signal_handler);
+
+    std::cout << "Sprayer TC Client + Serial PHTG Reader\n";
+    std::cout << "Serial: " << serial_device << " @ " << serial_baud << " baud\n\n";
+
+    auto nmea_serial = std::make_shared<tractor::comms::Serial>(serial_device, serial_baud);
+    nmea_serial->on_line([](const std::string &line) { process_nmea_line(line); });
+    nmea_serial->on_connection([](bool connected) {
+        if (connected) {
+            std::cout << "Serial port connected\n";
+        } else {
+            std::cout << "Serial port disconnected\n";
+        }
+    });
+    nmea_serial->on_error([](const std::string &error) { std::cerr << "Serial error: " << error << "\n"; });
+
+    if (!nmea_serial->start()) {
+        std::cerr << "Failed to start serial communication\n";
+        return -1;
+    }
 
     auto canDriver = std::make_shared<isobus::SocketCANInterface>("can0");
     if (nullptr == canDriver) {
@@ -634,6 +749,7 @@ int main() {
     }
 
     std::cout << "\nShutting down...\n";
+    nmea_serial->stop();
     TestTCClient->terminate();
     isobus::CANHardwareInterface::stop();
     return (!tcClientStarted);
