@@ -2,11 +2,7 @@
 
 Modern C++20 ISO 11783 (ISOBUS) + J1939 + NMEA2000 networking stack with a fluent, application-first API.
 
-Without it, this literally would not have happened. A big part of this library is best described as "a nicer API on top of them" - because the hard protocol truths, edge cases, and real-world behavior are learned from them first. See `ACKNOWLEDGMENTS.md`.
-
-## Development Status
-
-This repository uses `PLAN.md` as the master implementation roadmap.
+Before starting, i would like to thank immensely [AgIsoStack++](https://github.com/Open-Agriculture/AgIsoStack-plus-plus) for the inspiration and reference implementation) Without it, this literally would not have happened. A big part of this library is best described as "a nicer API on top of them" - because the hard protocol truths, edge cases, and real-world behavior are learned from them first. See [ACKNOWLEDGMENTS](./ACKNOWLEDGMENTS.md)
 
 ## Overview
 
@@ -30,30 +26,30 @@ High level data flow (receive path):
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                                 Application                               │
-│  - register_pgn_callback(PGN, fn)                                          │
-│  - protocol modules (VT/TC/TIM/FS/Diagnostics/...)                         │
+│  - register_pgn_callback(PGN, fn)                                         │
+│  - protocol modules (VT/TC/TIM/FS/Diagnostics/...)                        │
 └───────────────────────────────┬───────────────────────────────────────────┘
                                 │ on_message / callbacks
                                 ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                        isobus::network::NetworkManager                     │
-│  - endpoint polling / send_frame                                           │
-│  - address claiming + CF tracking                                          │
-│  - routes TP/ETP/FastPacket frames                                         │
-│  - dispatches Message{pgn,data,src,dst,prio,ts}                             │
+│                        isobus::network::NetworkManager                    │
+│  - endpoint polling / send_frame                                          │
+│  - address claiming + CF tracking                                         │
+│  - routes TP/ETP/FastPacket frames                                        │
+│  - dispatches Message{pgn,data,src,dst,prio,ts}                           │
 └───────────────┬───────────────────────┬───────────────────────┬───────────┘
                 │                       │                       │
                 ▼                       ▼                       ▼
-      ┌────────────────┐      ┌──────────────────┐     ┌──────────────────┐
+      ┌────────────────┐      ┌───────────────────┐     ┌───────────────────┐
       │ AddressClaimer │      │ TransportProtocol │     │ FastPacketProtocol│
-      │ (ISO11783-5)   │      │ + ETP            │     │ (NMEA2000)        │
-      └───────┬────────┘      └───────┬──────────┘     └─────────┬────────┘
+      │ (ISO11783-5)   │      │ + ETP             │     │ (NMEA2000)        │
+      └───────┬────────┘      └───────┬───────────┘     └──────────┬────────┘
               │                       │                            │
               └───────────────┬───────┴───────────────┬────────────┘
                               ▼                       ▼
                    ┌──────────────────┐    ┌─────────────────────────┐
-                   │   Frame / ID     │    │ wirebit::CanEndpoint     │
-                   │ (29-bit CAN ID)  │    │ (driver abstraction)     │
+                   │   Frame / ID     │    │ wirebit::CanEndpoint    │
+                   │ (29-bit CAN ID)  │    │ (driver abstraction)    │
                    └──────────────────┘    └─────────────────────────┘
 ```
 
@@ -346,27 +342,27 @@ The library is not claiming full compliance in every part yet; see `PLAN.md` for
 This diagram shows how the standards are layered from a software perspective.
 
 ```
-         ┌──────────────────────────────────────────┐
-         │              Application                 │
-         └─────────────────────┬────────────────────┘
+         ┌────────────────────────────────────────────┐
+         │                Application                 │
+         └─────────────────────┬──────────────────────┘
                                │
                                ▼
-┌──────────────────────────────────────────────────────────────┐
-│                 ISO 11783 Application Profiles               │
+┌───────────────────────────────────────────────────────────────┐
+│                 ISO 11783 Application Profiles                │
 │     VT (Part 6)   TC (Part 10)   TIM (Part 12)   SC (Part 14) │
-└──────────────────────────────┬───────────────────────────────┘
+└──────────────────────────────┬────────────────────────────────┘
                                │
                                ▼
-┌──────────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────────┐
 │          ISO 11783 Network/Transport + J1939 Services         │
 │      Address Claiming, TP/ETP, Diagnostics, Request, etc.     │
-└──────────────────────────────┬───────────────────────────────┘
+└──────────────────────────────┬────────────────────────────────┘
                                │
                                ▼
-┌──────────────────────────────────────────────────────────────┐
-│                         CAN 2.0B                             │
-│                29-bit identifier + 8 byte payload            │
-└──────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                         CAN 2.0B                              │
+│                29-bit identifier + 8 byte payload             │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## Module Tour
