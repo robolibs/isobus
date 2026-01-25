@@ -114,7 +114,9 @@ namespace agrobus::isobus::tc {
             }
             // Validate presentation object references in process data
             for (const auto &pd : process_data_) {
-                if (pd.presentation_object_id != 0xFFFF) {
+                // Presentation IDs use ObjectID semantics. 0 means "unset" in builder-style code.
+                // Treat both 0 and 0xFFFF as "no presentation".
+                if (pd.presentation_object_id != 0xFFFF && pd.presentation_object_id != 0) {
                     if (!vp_exists(pd.presentation_object_id)) {
                         return Result<void>::err(Error(ErrorCode::PoolValidation,
                                                        "process data references non-existent presentation object"));
@@ -123,7 +125,8 @@ namespace agrobus::isobus::tc {
             }
             // Validate presentation object references in properties
             for (const auto &prop : properties_) {
-                if (prop.presentation_object_id != 0xFFFF) {
+                // Treat both 0 and 0xFFFF as "no presentation".
+                if (prop.presentation_object_id != 0xFFFF && prop.presentation_object_id != 0) {
                     if (!vp_exists(prop.presentation_object_id)) {
                         return Result<void>::err(
                             Error(ErrorCode::PoolValidation, "property references non-existent presentation object"));
